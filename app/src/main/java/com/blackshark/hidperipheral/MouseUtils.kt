@@ -53,11 +53,9 @@ class MouseUtils {
             }
             MotionEvent.ACTION_MOVE -> {
                 maxPointerCount = max(maxPointerCount, event.pointerCount)
-                if (HidUtils.isConnected()) {
                     val deltaX = ((event.x - Xpad) * rate).toInt()
                     val deltay = ((event.y - Ypad) * rate).toInt()
                     HidConsts.mouseMove(deltaX, deltay, 0, !leftbtnUped || !leftUped, !rightbtnUped, !midbtnUped)
-                }
                 Xpad = event.x
                 Ypad = event.y
                 return true
@@ -69,7 +67,6 @@ class MouseUtils {
                 dis = now - actionDownTime_Pad
                 actionDownTime_Pad = now
 //                HidConsts.clickUp()
-                if (HidUtils.isConnected()) {
                     if (maxPointerCount == 1) {
                         if (dis in 50..150 && leftUped) {
                             virtureClickTask = HidConsts.leftBtnClickAsync(150)
@@ -83,7 +80,6 @@ class MouseUtils {
                             virtureClickTask = null
                         }
                     }
-                }
 //                Log.d(TAG, "mouseMove: $dis");
                 return true
             }
@@ -122,14 +118,12 @@ class MouseUtils {
             }
             MotionEvent.ACTION_MOVE -> {
                 maxPointerCount = Math.max(maxPointerCount, event.pointerCount)
-                if (HidUtils.isConnected()) {
                     if (!midbtnUped) {
                         HidConsts.midBtnUp()
                         midbtnUped = true
                     }
                     val deltay = -(event.y - Ymus).toInt()
                     HidConsts.mouseMove(0, 0, deltay, !leftbtnUped, !rightbtnUped, !midbtnUped)
-                }
                 Ymus = event.y
                 return true
             }

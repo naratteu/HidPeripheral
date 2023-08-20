@@ -1,8 +1,14 @@
 package com.blackshark.hidperipheral
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHidDevice
+import android.bluetooth.BluetoothHidDeviceAppSdpSettings
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothProfile.ServiceListener
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -18,11 +24,19 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.util.Timer
+import java.util.TimerTask
+import java.util.concurrent.Executors
 
 @OptIn(DelicateCoroutinesApi::class)
-class MainActivity : AppCompatActivity(), HidUtils.ConnectionStateChangeListener {
+class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private lateinit var binding: ActivityMainBinding
+
+    var isConnected = false
+    var isRegister = false
+    var mDevice: BluetoothDevice? = null
+    var mHidDevice: BluetoothHidDevice? = null
 
     var bluetoothPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == Activity.RESULT_OK) {
@@ -37,7 +51,68 @@ class MainActivity : AppCompatActivity(), HidUtils.ConnectionStateChangeListener
     var discoverPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         Log.d(TAG, ": ${it.resultCode}")
         if (it.resultCode == 120) {
-            start()
+            if (!isRegister) {
+                val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                bluetoothAdapter.name = "Peripheral MK"
+                bluetoothAdapter.getProfileProxy(applicationContext, object : ServiceListener {
+                    @SuppressLint("NewApi")
+                    override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                        Log.e(TAG, "hid onServiceConnected")
+                        if (profile == BluetoothProfile.HID_DEVICE) {
+                            mHidDevice = proxy as BluetoothHidDevice
+                            mHidDevice!!.registerApp(
+                                BluetoothHidDeviceAppSdpSettings(HidConsts.NAME, HidConsts.DESCRIPTION, HidConsts.PROVIDER, BluetoothHidDevice.SUBCLASS1_COMBO, HidConsts.Descriptor),
+                                null, null, Executors.newCachedThreadPool(),
+                                object : BluetoothHidDevice.Callback() {
+                                    override fun onAppStatusChanged(pluggedDevice: BluetoothDevice, registered: Boolean) {
+                                        Log.e(TAG, "onAppStatusChanged: $registered")
+                                        isRegister = registered
+                                    }
+                                    override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
+                                        Log.e(TAG, "onConnectionStateChanged:$state")
+                                        when (state) {
+                                            BluetoothProfile.STATE_DISCONNECTED -> {
+                                                isConnected = false
+                                                mDevice = null
+                                                GlobalScope.launch(Dispatchers.Main) {
+                                                    binding.tvConnectStatus.text = getString(R.string.ununited)
+                                                }
+                                            }
+                                            BluetoothProfile.STATE_CONNECTED -> {
+                                                isConnected = true
+                                                mDevice = device
+                                                if (Build.VERSION.SDK_INT >= 31 && ActivityCompat.checkSelfPermission(applicationContext, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                                                    return
+                                                }
+                                                GlobalScope.launch(Dispatchers.Main) {
+                                                    binding.tvConnectStatus.text = "${getString(R.string.connected)} : ${mDevice!!.name}"
+                                                    HidConsts.cleanKbd()
+                                                }
+                                            }
+                                            BluetoothProfile.STATE_CONNECTING -> {}
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    override fun onServiceDisconnected(profile: Int) {
+                        if (profile == BluetoothProfile.HID_DEVICE) {
+                            mHidDevice?.unregisterApp()
+                        }
+                    }
+                }, BluetoothProfile.HID_DEVICE)
+            }
+            Timer().scheduleAtFixedRate(object : TimerTask() {
+                override fun run() {
+                    HidConsts.inputReportQueue.poll()?.run {
+                        if (isConnected) {
+                            HidReport.SendState = HidReport.State.Sending
+                            HidReport.SendState = if (mHidDevice!!.sendReport(mDevice, ReportId.toInt(), ReportData)) HidReport.State.Sended else HidReport.State.Failded
+                        }
+                    }
+                }
+            }, 0, 5)
         }
     }
     var connectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -64,50 +139,21 @@ class MainActivity : AppCompatActivity(), HidUtils.ConnectionStateChangeListener
         }
 
         binding.btnMouse.setOnClickListener {
-            if (HidUtils.isConnected()) {
+            if (isConnected) {
                 startActivity(Intent(this, MouseActivity::class.java))
             }
         }
 
         binding.btnKeyboard.setOnClickListener {
-            if (HidUtils.isConnected()) {
+            if (isConnected) {
                 startActivity(Intent(this, KeyboardActivity::class.java))
             }
         }
     }
 
-    private fun start() {
-        HidUtils.registerApp(applicationContext)
-        HidConsts.reporters(applicationContext)
-        HidUtils.connectionStateChangeListener = this
-    }
-
-    override fun onConnecting() {
-    }
-
-    override fun onConnected() {
-        if (Build.VERSION.SDK_INT >= 31 && ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            return
-        }
-
-        GlobalScope.launch(Dispatchers.Main) {
-            binding.tvConnectStatus.text = "${getString(R.string.connected)} : ${HidUtils.mDevice!!.name}"
-            HidConsts.cleanKbd()
-        }
-
-    }
-
-    override fun onDisConnected() {
-        GlobalScope.launch(Dispatchers.Main) {
-            binding.tvConnectStatus.text = getString(R.string.ununited)
-        }
-
-    }
-
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         binding.tvConnectStatus.text = "$event"
-        when(event?.action)
-        {
+        when (event?.action) {
             ACTION_DOWN -> HidConsts.kbdKeyDown(keyCode2usageStr(event.keyCode))
             ACTION_UP -> HidConsts.kbdKeyUp(keyCode2usageStr(event.keyCode))
             else -> return true

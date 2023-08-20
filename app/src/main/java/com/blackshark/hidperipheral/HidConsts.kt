@@ -16,54 +16,12 @@ object HidConsts {
     const val DESCRIPTION = "fac"
     const val PROVIDER = "funny"
 
-    @JvmField
-    var HidDevice: BluetoothHidDevice? = null
-
-    private var handler: Handler? = null
-    private val inputReportQueue: Queue<HidReport> = ConcurrentLinkedQueue()
+    val inputReportQueue: Queue<HidReport> = ConcurrentLinkedQueue()
     var ModifierByte: Byte = 0x00
     var KeyByte: Byte = 0x00
-    fun cleanKbd() {
-        sendKeyReport(byteArrayOf(0, 0))
-        Alted = false
-    }
+    fun cleanKbd() = sendKeyReport(byteArrayOf(0, 0))
 
-    var Alted = false
-    private fun addInputReport(inputReport: HidReport?) {
-        if (inputReport != null) {
-            inputReportQueue.offer(inputReport)
-        }
-    }
-
-    var scheperoid: Long = 5
-    fun reporters(context: Context) {
-        handler = Handler(context.mainLooper)
-        Timer().scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                val report = inputReportQueue.poll()
-                if (report != null) {
-                    if (HidUtils.isConnected()) {
-                        postReport(report)
-                    }
-                }
-            }
-        }, 0, scheperoid)
-    }
-
-    private fun postReport(report: HidReport) {
-        HidReport.SendState = HidReport.State.Sending
-        val ret = HidDevice!!.sendReport(HidUtils.mDevice, report.ReportId.toInt(), report.ReportData)
-        if (!ret) {
-            HidReport.SendState = HidReport.State.Failded
-        } else {
-            HidReport.SendState = HidReport.State.Sended
-        }
-    }
-
-    fun sendMouseReport(reportData: ByteArray?) {
-        val report = HidReport(HidReport.DeviceType.Mouse, 0x01.toByte(), reportData!!)
-        addInputReport(report)
-    }
+    fun sendMouseReport(reportData: ByteArray?) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Mouse, 0x01.toByte(), reportData!!))
 
     private val MouseReport = HidReport(HidReport.DeviceType.Mouse, 0x01.toByte(), byteArrayOf(0, 0, 0, 0))
     fun mouseMove(dx: Int, dy: Int, wheel: Int, leftButton: Boolean, rightButton: Boolean, middleButton: Boolean) {
@@ -97,7 +55,7 @@ object HidConsts {
         MouseReport.ReportData[1] = dx.toByte()
         MouseReport.ReportData[2] = dy.toByte()
         MouseReport.ReportData[3] = wheel.toByte()
-        addInputReport(MouseReport)
+        inputReportQueue.offer(MouseReport)
     }
 
     fun leftBtnDown() {
@@ -188,10 +146,7 @@ object HidConsts {
         }
     }
 
-    private fun sendKeyReport(reportData: ByteArray) {
-        val report = HidReport(HidReport.DeviceType.Keyboard, 0x02.toByte(), reportData)
-        addInputReport(report)
-    }
+    private fun sendKeyReport(reportData: ByteArray) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Keyboard, 0x02.toByte(), reportData))
 
     @JvmField
     val Descriptor = byteArrayOf(
