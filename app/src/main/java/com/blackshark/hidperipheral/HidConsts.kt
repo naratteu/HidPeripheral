@@ -12,9 +12,6 @@ import kotlin.experimental.or
 
 object HidConsts {
     const val TAG = "u-HidConsts"
-    const val NAME = "BS-HID-Peripheral"
-    const val DESCRIPTION = "fac"
-    const val PROVIDER = "funny"
 
     val inputReportQueue: Queue<HidReport> = ConcurrentLinkedQueue()
     var ModifierByte: Byte = 0x00
@@ -28,9 +25,6 @@ object HidConsts {
         var dx = dx
         var dy = dy
         var wheel = wheel
-        if (HidReport.SendState == HidReport.State.Sending) {
-            return
-        }
         if (dx > 127) dx = 127
         if (dx < -127) dx = -127
         if (dy > 127) dy = 127

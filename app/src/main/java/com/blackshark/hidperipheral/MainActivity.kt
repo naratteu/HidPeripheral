@@ -1,7 +1,6 @@
 package com.blackshark.hidperipheral
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -10,7 +9,6 @@ import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothProfile.ServiceListener
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -18,7 +16,6 @@ import android.view.KeyEvent
 import android.view.KeyEvent.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import com.blackshark.hidperipheral.databinding.ActivityMainBinding
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +23,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.util.Timer
 import java.util.TimerTask
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 @OptIn(DelicateCoroutinesApi::class)
@@ -33,8 +31,8 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private lateinit var binding: ActivityMainBinding
 
-    var isConnected = false
-    var isRegister = false
+    val hashmap = ConcurrentHashMap<BluetoothDevice, Boolean>()
+    val hashmap2 = ConcurrentHashMap<BluetoothDevice, Int>()
     var mDevice: BluetoothDevice? = null
     var mHidDevice: BluetoothHidDevice? = null
 
@@ -51,65 +49,50 @@ class MainActivity : AppCompatActivity() {
     var discoverPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         Log.d(TAG, ": ${it.resultCode}")
         if (it.resultCode == 120) {
-            if (!isRegister) {
                 val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
                 bluetoothAdapter.name = "Peripheral MK"
                 bluetoothAdapter.getProfileProxy(applicationContext, object : ServiceListener {
-                    @SuppressLint("NewApi")
                     override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                        Log.e(TAG, "hid onServiceConnected")
-                        if (profile == BluetoothProfile.HID_DEVICE) {
+                        Log.e(TAG, "hid onServiceConnected ${profile} {proxy}")
                             mHidDevice = proxy as BluetoothHidDevice
-                            mHidDevice!!.registerApp(
-                                BluetoothHidDeviceAppSdpSettings(HidConsts.NAME, HidConsts.DESCRIPTION, HidConsts.PROVIDER, BluetoothHidDevice.SUBCLASS1_COMBO, HidConsts.Descriptor),
+                            mHidDevice?.registerApp(
+                                BluetoothHidDeviceAppSdpSettings("BS-HID-Peripheral", "fac", "funny", BluetoothHidDevice.SUBCLASS1_COMBO, HidConsts.Descriptor),
                                 null, null, Executors.newCachedThreadPool(),
                                 object : BluetoothHidDevice.Callback() {
                                     override fun onAppStatusChanged(pluggedDevice: BluetoothDevice, registered: Boolean) {
                                         Log.e(TAG, "onAppStatusChanged: $registered")
-                                        isRegister = registered
+                                        hashmap[pluggedDevice] = registered
+                                        GlobalScope.launch(Dispatchers.Main) {
+                                            binding.tvConnectStatus.text = "${hashmap} : ${hashmap2}"
+                                        }
                                     }
                                     override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
                                         Log.e(TAG, "onConnectionStateChanged:$state")
+                                        hashmap2[device] = state
+                                        GlobalScope.launch(Dispatchers.Main) {
+                                            binding.tvConnectStatus.text = "${hashmap} : ${hashmap2}"
+                                            HidConsts.cleanKbd()
+                                        }
                                         when (state) {
-                                            BluetoothProfile.STATE_DISCONNECTED -> {
-                                                isConnected = false
-                                                mDevice = null
-                                                GlobalScope.launch(Dispatchers.Main) {
-                                                    binding.tvConnectStatus.text = getString(R.string.ununited)
-                                                }
-                                            }
                                             BluetoothProfile.STATE_CONNECTED -> {
-                                                isConnected = true
                                                 mDevice = device
-                                                if (Build.VERSION.SDK_INT >= 31 && ActivityCompat.checkSelfPermission(applicationContext, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                                                    return
-                                                }
                                                 GlobalScope.launch(Dispatchers.Main) {
-                                                    binding.tvConnectStatus.text = "${getString(R.string.connected)} : ${mDevice!!.name}"
                                                     HidConsts.cleanKbd()
                                                 }
                                             }
-                                            BluetoothProfile.STATE_CONNECTING -> {}
                                         }
                                     }
                                 }
                             )
-                        }
                     }
                     override fun onServiceDisconnected(profile: Int) {
-                        if (profile == BluetoothProfile.HID_DEVICE) {
-                            mHidDevice?.unregisterApp()
-                        }
+                        Log.e(TAG, "hid onServiceDisconnected ${profile}")
                     }
                 }, BluetoothProfile.HID_DEVICE)
-            }
             Timer().scheduleAtFixedRate(object : TimerTask() {
                 override fun run() {
                     HidConsts.inputReportQueue.poll()?.run {
-                        if (isConnected) {
-                            HidReport.SendState = HidReport.State.Sending
-                            HidReport.SendState = if (mHidDevice!!.sendReport(mDevice, ReportId.toInt(), ReportData)) HidReport.State.Sended else HidReport.State.Failded
-                        }
+                        mHidDevice?.sendReport(mDevice, ReportId.toInt(), ReportData)
                     }
                 }
             }, 0, 5)
@@ -139,9 +122,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnMouse.setOnClickListener {
-            if (isConnected) {
                 startActivity(Intent(this, MouseActivity::class.java))
-            }
         }
 
         binding.btnKeyboard.setOnClickListener {
