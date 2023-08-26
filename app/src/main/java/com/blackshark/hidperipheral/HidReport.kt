@@ -1,9 +1,8 @@
 package com.blackshark.hidperipheral
 
-import com.blackshark.hidperipheral.HidReport.DeviceType
-
-class HidReport(var deviceType: DeviceType, var ReportId: Byte, var ReportData: ByteArray) {
-    enum class DeviceType {
-        None, Mouse, Keyboard
+class HidReport(var ReportId: Int, var ReportData: ByteArray) {
+    object DeviceType {
+        val Mouse = 0x01
+        val Keyboard = 0x02
     }
 }

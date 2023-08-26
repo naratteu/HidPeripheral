@@ -13,14 +13,14 @@ import kotlin.experimental.or
 object HidConsts {
     const val TAG = "u-HidConsts"
 
-    val inputReportQueue: Queue<HidReport> = ConcurrentLinkedQueue()
+    val inputReportQueue = ConcurrentLinkedQueue<HidReport>()
     var ModifierByte: Byte = 0x00
     var KeyByte: Byte = 0x00
     fun cleanKbd() = sendKeyReport(byteArrayOf(0, 0))
 
-    fun sendMouseReport(reportData: ByteArray?) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Mouse, 0x01.toByte(), reportData!!))
+    fun sendMouseReport(reportData: ByteArray?) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Mouse, reportData!!))
 
-    private val MouseReport = HidReport(HidReport.DeviceType.Mouse, 0x01.toByte(), byteArrayOf(0, 0, 0, 0))
+    private val MouseReport = HidReport(HidReport.DeviceType.Mouse, byteArrayOf(0, 0, 0, 0))
     fun mouseMove(dx: Int, dy: Int, wheel: Int, leftButton: Boolean, rightButton: Boolean, middleButton: Boolean) {
         var dx = dx
         var dy = dy
@@ -140,7 +140,7 @@ object HidConsts {
         }
     }
 
-    private fun sendKeyReport(reportData: ByteArray) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Keyboard, 0x02.toByte(), reportData))
+    private fun sendKeyReport(reportData: ByteArray) = inputReportQueue.offer(HidReport(HidReport.DeviceType.Keyboard, reportData))
 
     @JvmField
     val Descriptor = byteArrayOf(
