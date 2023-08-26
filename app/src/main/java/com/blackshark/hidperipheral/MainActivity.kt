@@ -15,7 +15,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.KeyEvent.*
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.blackshark.hidperipheral.databinding.ActivityMainBinding
@@ -31,69 +30,74 @@ class MainActivity : AppCompatActivity() {
     val hashmap = ConcurrentHashMap<BluetoothDevice, Boolean>()
     val hashmap2 = ConcurrentHashMap<BluetoothDevice, Int>()
 
-    val bluetoothPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
+    val bluetoothPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { Start() }
 
     val discoverPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         Log.d(TAG, ": ${it.resultCode}")
-        if (it.resultCode == 120) {
-            val manager = getSystemService(AppCompatActivity.BLUETOOTH_SERVICE) as BluetoothManager
-            val bluetoothAdapter = manager.adapter
-            Toast.makeText(this, if (bluetoothAdapter?.isEnabled == true) R.string.toast_bluetooth_on else R.string.toast_bluetooth_off, Toast.LENGTH_SHORT).show()
-            bluetoothAdapter.name = "Peripheral MK"
-            bluetoothAdapter.getProfileProxy(applicationContext, object : ServiceListener {
-                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                    Log.e(TAG, "hid onServiceConnected ${profile} {proxy}")
-                    val mHidDevice = proxy as BluetoothHidDevice
-                    mHidDevice?.registerApp(
-                        BluetoothHidDeviceAppSdpSettings("BS-HID-Peripheral", "fac", "funny", BluetoothHidDevice.SUBCLASS1_COMBO, HidConsts.Descriptor),
-                        null, null, Executors.newCachedThreadPool(),
-                        object : BluetoothHidDevice.Callback() {
-                            override fun onAppStatusChanged(pluggedDevice: BluetoothDevice, registered: Boolean) {
-                                Log.e(TAG, "onAppStatusChanged: $registered")
-                                hashmap[pluggedDevice] = registered
-                                mHidDevice.connect(pluggedDevice)
-                                runOnUiThread {
-                                    binding.tvConnectStatus.text = "${hashmap} \n ${hashmap2} \n ${bluetoothAdapter.bondedDevices} \n ${mHidDevice.connectedDevices}"
-                                }
-                            }
+    }
 
-                            override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-                                Log.e(TAG, "onConnectionStateChanged:$state")
-                                hashmap2[device] = state
-                                runOnUiThread {
-                                    binding.tvConnectStatus.text = "${hashmap} \n ${hashmap2} \n ${bluetoothAdapter.bondedDevices} \n ${mHidDevice.connectedDevices}"
-                                    HidConsts.cleanKbd()
-                                }
-                                when (state) {
-                                    BluetoothProfile.STATE_CONNECTED -> {
-                                        runOnUiThread {
-                                            HidConsts.cleanKbd()
-                                        }
-                                        Timer().scheduleAtFixedRate(object : TimerTask() {
-                                            override fun run() {
-                                                HidConsts.inputReportQueue.poll()?.run {
-                                                    mHidDevice?.sendReport(device, ReportId, ReportData)
-                                                }
-                                            }
-                                        }, 0, 5)
+    fun Start() {
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            connectPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            return
+        }
+        val manager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager?
+        val bluetoothAdapter = manager?.adapter
+        if (bluetoothAdapter == null) {
+            bluetoothPermission.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        bluetoothAdapter.name = "Peripheral MK"
+        bluetoothAdapter.getProfileProxy(applicationContext, object : ServiceListener {
+            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                Log.e(TAG, "hid onServiceConnected ${profile} {proxy}")
+                val mHidDevice = proxy as BluetoothHidDevice?
+                mHidDevice?.registerApp(
+                    BluetoothHidDeviceAppSdpSettings("BS-HID-Peripheral", "fac", "funny", BluetoothHidDevice.SUBCLASS1_COMBO, HidConsts.Descriptor),
+                    null, null, Executors.newCachedThreadPool(),
+                    object : BluetoothHidDevice.Callback() {
+                        override fun onAppStatusChanged(pluggedDevice: BluetoothDevice, registered: Boolean) {
+                            Log.e(TAG, "onAppStatusChanged: $registered")
+                            hashmap[pluggedDevice] = registered
+                            mHidDevice.connect(pluggedDevice)
+                            runOnUiThread {
+                                binding.tvConnectStatus.text = "${hashmap} \n ${hashmap2} \n ${bluetoothAdapter.bondedDevices} \n ${mHidDevice.connectedDevices}"
+                            }
+                        }
+
+                        override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
+                            Log.e(TAG, "onConnectionStateChanged:$state")
+                            hashmap2[device] = state
+                            runOnUiThread {
+                                binding.tvConnectStatus.text = "${hashmap} \n ${hashmap2} \n ${bluetoothAdapter.bondedDevices} \n ${mHidDevice.connectedDevices}"
+                                HidConsts.cleanKbd()
+                            }
+                            when (state) {
+                                BluetoothProfile.STATE_CONNECTED -> {
+                                    runOnUiThread {
+                                        HidConsts.cleanKbd()
                                     }
+                                    Timer().scheduleAtFixedRate(object : TimerTask() {
+                                        override fun run() {
+                                            HidConsts.inputReportQueue.poll()?.run {
+                                                mHidDevice.sendReport(device, ReportId, ReportData)
+                                            }
+                                        }
+                                    }, 0, 5)
                                 }
                             }
                         }
-                    )
-                }
+                    }
+                )
+            }
 
-                override fun onServiceDisconnected(profile: Int) {
-                    Log.e(TAG, "hid onServiceDisconnected ${profile}")
-                }
-            }, BluetoothProfile.HID_DEVICE)
-        }
+            override fun onServiceDisconnected(profile: Int) {
+                Log.e(TAG, "hid onServiceDisconnected ${profile}")
+            }
+        }, BluetoothProfile.HID_DEVICE)
     }
-    val connectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        if (!it) {
-            Toast.makeText(this, R.string.toast_permission, Toast.LENGTH_SHORT).show()
-        }
-    }
+
+    val connectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { Start() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,11 +105,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnStart.setOnClickListener {
-            if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                connectPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                return@setOnClickListener
-            }
-            bluetoothPermission.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             discoverPermission.launch(Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE))
         }
 
@@ -116,6 +115,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnKeyboard.setOnClickListener {
             startActivity(Intent(this, KeyboardActivity::class.java))
         }
+
+        Start()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
