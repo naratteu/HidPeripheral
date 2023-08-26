@@ -7,7 +7,6 @@ import kotlin.math.max
 class MouseUtils {
     private var Xpad = 0f
     private var Ypad = 0f
-    private val Xmus = 0f
     private var Ymus = 0f
     private var maxPointerCount = 0
     private var actionDownTime_Pad: Long = 0
@@ -17,8 +16,6 @@ class MouseUtils {
     var rightbtnUped = true //右键是否抬起
     var midbtnUped = true //中键是否抬起
     var virtureClickTask: TimerTask? = null
-    private val mParam1: String? = null
-    private val mParam2: String? = null
     fun mouseLeft(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_UP) {
             HidConsts.leftBtnUp()
@@ -31,8 +28,8 @@ class MouseUtils {
     }
 
     fun mouseMove(event: MotionEvent): Boolean {
-        val now:Long
-        val dis:Long
+        val now: Long
+        val dis: Long
         when (event.action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 now = Date().time
@@ -44,43 +41,42 @@ class MouseUtils {
                     HidConsts.leftBtnDown()
                     leftUped = false
                 }
-//                HidConsts.clickDown(event.rawX.toInt(),event.rawY.toInt())
                 actionDownTime_Pad = now
                 maxPointerCount = event.pointerCount
                 Xpad = event.x
                 Ypad = event.y
                 return true
             }
+
             MotionEvent.ACTION_MOVE -> {
                 maxPointerCount = max(maxPointerCount, event.pointerCount)
-                    val deltaX = ((event.x - Xpad) * rate).toInt()
-                    val deltay = ((event.y - Ypad) * rate).toInt()
-                    HidConsts.mouseMove(deltaX, deltay, 0, !leftbtnUped || !leftUped, !rightbtnUped, !midbtnUped)
+                val deltaX = ((event.x - Xpad) * rate).toInt()
+                val deltay = ((event.y - Ypad) * rate).toInt()
+                HidConsts.mouseMove(deltaX, deltay, 0, !leftbtnUped || !leftUped, !rightbtnUped, !midbtnUped)
                 Xpad = event.x
                 Ypad = event.y
                 return true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 Xpad = event.x
                 Ypad = event.y
                 now = Date().time
                 dis = now - actionDownTime_Pad
                 actionDownTime_Pad = now
-//                HidConsts.clickUp()
-                    if (maxPointerCount == 1) {
-                        if (dis in 50..150 && leftUped) {
-                            virtureClickTask = HidConsts.leftBtnClickAsync(150)
-                        } else if (dis in 50..150 && !leftUped) {
-                            HidConsts.leftBtnUp()
-                            leftUped = true //模拟左键抬起
-                            HidConsts.leftBtnClickAsync(20)
-                        } else {
-                            HidConsts.leftBtnUp()
-                            leftUped = true //模拟左键抬起
-                            virtureClickTask = null
-                        }
+                if (maxPointerCount == 1) {
+                    if (dis in 50..150 && leftUped) {
+                        virtureClickTask = HidConsts.leftBtnClickAsync(150)
+                    } else if (dis in 50..150 && !leftUped) {
+                        HidConsts.leftBtnUp()
+                        leftUped = true //模拟左键抬起
+                        HidConsts.leftBtnClickAsync(20)
+                    } else {
+                        HidConsts.leftBtnUp()
+                        leftUped = true //模拟左键抬起
+                        virtureClickTask = null
                     }
-//                Log.d(TAG, "mouseMove: $dis");
+                }
                 return true
             }
         }
@@ -98,14 +94,6 @@ class MouseUtils {
         return true
     }
 
-    fun keyboardDown(usageStr: String){
-        HidConsts.kbdKeyDown(usageStr)
-    }
-
-    fun keyboardUp(usageStr: String){
-        HidConsts.kbdKeyUp(usageStr)
-    }
-
     fun mouseMiddle(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -116,17 +104,19 @@ class MouseUtils {
                 midbtnUped = false
                 return true
             }
+
             MotionEvent.ACTION_MOVE -> {
                 maxPointerCount = Math.max(maxPointerCount, event.pointerCount)
-                    if (!midbtnUped) {
-                        HidConsts.midBtnUp()
-                        midbtnUped = true
-                    }
-                    val deltay = -(event.y - Ymus).toInt()
-                    HidConsts.mouseMove(0, 0, deltay, !leftbtnUped, !rightbtnUped, !midbtnUped)
+                if (!midbtnUped) {
+                    HidConsts.midBtnUp()
+                    midbtnUped = true
+                }
+                val deltay = -(event.y - Ymus).toInt()
+                HidConsts.mouseMove(0, 0, deltay, !leftbtnUped, !rightbtnUped, !midbtnUped)
                 Ymus = event.y
                 return true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (!midbtnUped) {
                     HidConsts.midBtnUp()
@@ -136,11 +126,5 @@ class MouseUtils {
             }
         }
         return false
-    }
-
-    companion object {
-        const val TAG = "u-FragmentMousePad"
-        private const val ARG_PARAM1 = "param1"
-        private const val ARG_PARAM2 = "param2"
     }
 }

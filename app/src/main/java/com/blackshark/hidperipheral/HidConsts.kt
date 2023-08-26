@@ -1,8 +1,5 @@
 package com.blackshark.hidperipheral
 
-import android.bluetooth.BluetoothHidDevice
-import android.content.Context
-import android.os.Handler
 import android.text.TextUtils
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -11,8 +8,6 @@ import kotlin.experimental.inv
 import kotlin.experimental.or
 
 object HidConsts {
-    const val TAG = "u-HidConsts"
-
     val inputReportQueue = ConcurrentLinkedQueue<HidReport>()
     var ModifierByte: Byte = 0x00
     var KeyByte: Byte = 0x00
@@ -64,11 +59,11 @@ object HidConsts {
 
     fun leftBtnClick() {
         leftBtnDown()
-        UtilCls.DelayTask({ leftBtnUp() }, 20, true)
+        UtilCls.DelayTask({ leftBtnUp() }, 20)
     }
 
     fun leftBtnClickAsync(delay: Int): TimerTask {
-        return UtilCls.DelayTask({ leftBtnClick() }, delay, true)
+        return UtilCls.DelayTask({ leftBtnClick() }, delay)
     }
 
     fun rightBtnDown() {
@@ -91,31 +86,18 @@ object HidConsts {
         sendMouseReport(MouseReport.ReportData)
     }
 
-    fun modifierDown(UsageId: Byte): Byte {
-        synchronized(HidConsts::class.java) { ModifierByte = ModifierByte or UsageId }
-        return ModifierByte
-    }
-
-    fun modifierUp(UsageId: Byte): Byte {
-        var UsageId = UsageId
-        UsageId = UsageId.inv().toByte()
-        synchronized(HidConsts::class.java) { ModifierByte = (ModifierByte and UsageId).toByte() }
-        return ModifierByte
-    }
 
     fun kbdKeyDown(usageStr: String) {
-        var usageStr = usageStr
         if (!TextUtils.isEmpty(usageStr)) {
             if (usageStr.startsWith("M")) {
-                usageStr = usageStr.replace("M", "")
+                val UsageId = usageStr.substring(1).toInt().toByte()
                 synchronized(HidConsts::class.java) {
-                    val mod = modifierDown(usageStr.toInt().toByte())
-                    sendKeyReport(byteArrayOf(mod, KeyByte))
+                    ModifierByte = ModifierByte or UsageId
+                    sendKeyReport(byteArrayOf(ModifierByte, KeyByte))
                 }
             } else {
-                val key = usageStr.toInt().toByte()
                 synchronized(HidConsts::class.java) {
-                    KeyByte = key
+                    KeyByte = usageStr.toInt().toByte()
                     sendKeyReport(byteArrayOf(ModifierByte, KeyByte))
                 }
             }
@@ -123,13 +105,12 @@ object HidConsts {
     }
 
     fun kbdKeyUp(usageStr: String) {
-        var usageStr = usageStr
         if (!TextUtils.isEmpty(usageStr)) {
             if (usageStr.startsWith("M")) {
-                usageStr = usageStr.replace("M", "")
+                val UsageId = usageStr.substring(1).toInt().toByte()
                 synchronized(HidConsts::class.java) {
-                    val mod = modifierUp(usageStr.toInt().toByte())
-                    sendKeyReport(byteArrayOf(mod, KeyByte))
+                    ModifierByte = ModifierByte and UsageId.inv()
+                    sendKeyReport(byteArrayOf(ModifierByte, KeyByte))
                 }
             } else {
                 synchronized(HidConsts::class.java) {

@@ -10,14 +10,12 @@ object UtilCls {
      * @param runonce
      */
     @JvmStatic
-    fun DelayTask(runnable: Runnable, delay: Int, runonce: Boolean): TimerTask {
+    fun DelayTask(runnable: Runnable, delay: Int): TimerTask {
         val timer = Timer()
         val task: TimerTask = object : TimerTask() {
             override fun run() {
                 runnable.run()
-                if (runonce) {
-                    cancel()
-                }
+                cancel()
             }
         }
         timer.schedule(task, delay.toLong())
